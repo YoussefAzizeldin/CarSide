@@ -1,0 +1,38 @@
+// mDNS advertisement on Windows (using dns_sd.h from Bonjour SDK)
+#include <dns_sd.h>
+#include <cstdio>
+
+DNSServiceRef g_dnsServiceRef = nullptr;
+
+bool RegisterBonjourService() {
+    DNSServiceErrorType err = DNSServiceRegister(
+        &g_dnsServiceRef,
+        kDNSServiceFlagsShareConnection,
+        0,
+        "WindowsExtend",
+        "_winextend._tcp.",
+        nullptr, // domain (default)
+        nullptr, // host (default)
+        htons(7878),
+        0,
+        nullptr,
+        nullptr,
+        nullptr);
+
+    if (err != kDNSServiceErr_NoError) {
+        fprintf(stderr, "[mDNS] DNSServiceRegister failed: %d\n", err);
+        g_dnsServiceRef = nullptr;
+        return false;
+    }
+
+    // Important: process the DNSServiceRef on a runloop/polling thread.
+    // For simple apps, use DNSServiceProcessResult(g_dnsServiceRef) in a loop.
+    return true;
+}
+
+void UnregisterBonjourService() {
+    if (g_dnsServiceRef) {
+        DNSServiceRefDeallocate(g_dnsServiceRef);
+        g_dnsServiceRef = nullptr;
+    }
+}

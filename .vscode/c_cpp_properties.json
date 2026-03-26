@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/Program Files (x86)/Microsoft Visual Studio/**/VC/Tools/MSVC/*/include",
+                "C:/Program Files (x86)/Windows Kits/**/Include/*/ucrt",
+                "C:/Program Files (x86)/Windows Kits/**/Include/*/um",
+                "C:/Program Files (x86)/Windows Kits/**/Include/*/shared",
+                "C:/Program Files/Bonjour SDK/Include",
+                "C:/Program Files (x86)/Bonjour SDK/Include",
+                "C:/vcpkg/installed/x64-windows/include",
+                "C:/vcpkg/installed/x86-windows/include",
+                "C:/Program Files/NVIDIA GPU Computing Toolkit/NVIDIA Video Codec SDK/include",
+                "C:/Program Files (x86)/NVIDIA GPU Computing Toolkit/NVIDIA Video Codec SDK/include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.19041.0",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/**/VC/Tools/MSVC/*/bin/Hostx64/x64/cl.exe"
+        }
+    ],
+    "version": 4
+}
