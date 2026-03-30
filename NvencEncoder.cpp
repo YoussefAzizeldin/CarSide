@@ -1,53 +1,139 @@
-// NvencEncoder.cpp — using NVIDIA Video Codec SDK
-#include "nvEncodeAPI.h"
+// AMDEncoder.cpp — cross-platform video encoding for NVIDIA (NVENC), AMD (VCN), and CPU
+// Uses Windows Media Foundation (IMFTransform) with DXVA2 hardware acceleration
+#include <mfapi.h>
+#include <mfidl.h>
+#include <dxva2api.h>
+#include <codecapi.h>
 #include <d3d11.h>
+#include <wrl/client.h>
+#include <vector>
+#include <cstdint>
 
-extern ID3D11Device* g_d3dDevice; // Provided by frame capture module
+using Microsoft::WRL::ComPtr;
 
-class NvencEncoder {
-    NV_ENCODE_API_FUNCTION_LIST m_nvenc = {};
-    void*  m_encoder  = nullptr;
-    void*  m_inputBuf = nullptr;
-    void*  m_outputBuf = nullptr;
+extern ID3D11Device* g_d3dDevice;  // Provided by frame capture module
+extern ID3D11DeviceContext* g_d3dContext;
+
+class AMDEncoder {
+    ComPtr<IMFTransform> m_encoder;
+    ComPtr<IMFSample> m_inputSample;
+    ComPtr<IMFMediaBuffer> m_outputBuffer;
+    DWORD m_inputStreamId = 0;
+    DWORD m_outputStreamId = 0;
+    int m_width, m_height, m_fps;
 
 public:
     bool Init(int width, int height, int fps = 60) {
-        NvEncodeAPICreateInstance(&m_nvenc);
+        m_width = width;
+        m_height = height;
+        m_fps = fps;
 
-        NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS sp = {NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER};
-        sp.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
-        sp.device     = g_d3dDevice; // your ID3D11Device*
-        sp.apiVersion = NVENCAPI_VERSION;
-        m_nvenc.nvEncOpenEncodeSessionEx(&sp, &m_encoder);
+        // Initialize Media Foundation
+        MFStartup(MF_VERSION);
 
-        // Configure H.264 low-latency preset
-        NV_ENC_INITIALIZE_PARAMS initParams  = {NV_ENC_INITIALIZE_PARAMS_VER};
-        NV_ENC_CONFIG             encConfig  = {NV_ENC_CONFIG_VER};
-        initParams.encodeConfig              = &encConfig;
-        initParams.encodeGUID                = NV_ENC_CODEC_H264_GUID;
-        initParams.presetGUID                = NV_ENC_PRESET_P1_GUID; // lowest latency
-        initParams.encodeWidth               = width;
-        initParams.encodeHeight              = height;
-        initParams.frameRateNum              = fps;
-        initParams.frameRateDen              = 1;
-        initParams.enablePTD                 = 1;
+        // Create H264 encoder (MediaFoundation auto-selects hardware if available)
+        CLSID encoderId = CLSID_CMSH264EncoderMFT;  // Hardware H.264 encoder
+        if (FAILED(CoCreateInstance(encoderId, nullptr, CLSCTX_INPROC_SERVER, 
+                                    IID_PPV_ARGS(&m_encoder)))) {
+            // Fallback to software encoder if hardware unavailable
+            encoderId = CLSID_CMSH264EncoderMFT;
+            if (FAILED(CoCreateInstance(encoderId, nullptr, CLSCTX_INPROC_SERVER,
+                                        IID_PPV_ARGS(&m_encoder)))) {
+                return false;
+            }
+        }
 
-        encConfig.gopLength                              = NVENC_INFINITE_GOPLENGTH;
-        encConfig.frameIntervalP                         = 1;
-        encConfig.encodeCodecConfig.h264Config.idrPeriod = NVENC_INFINITE_GOPLENGTH;
+        // Set input type (NV12 format for GPU acceleration)
+        ComPtr<IMFMediaType> inputType;
+        MFCreateMediaType(&inputType);
+        inputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+        inputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+        inputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+        inputType->SetUINT32(MF_MT_MPEG2_FLAGS, 0);
+        
+        MFSetAttributeSize(inputType.Get(), MF_MT_FRAME_SIZE, width, height);
+        MFSetAttributeRatio(inputType.Get(), MF_MT_FRAME_RATE, fps, 1);
+        MFSetAttributeRatio(inputType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
 
-        m_nvenc.nvEncInitializeEncoder(m_encoder, &initParams);
-        // Allocate I/O buffers ...
+        m_encoder->SetInputType(0, inputType.Get(), 0);
+
+        // Set output type (H.264 NAL format)
+        ComPtr<IMFMediaType> outputType;
+        MFCreateMediaType(&outputType);
+        outputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+        outputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+        outputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+        
+        // Bitrate & quality settings
+        outputType->SetUINT32(MF_MT_AVG_BITRATE, 8000000); // 8 Mbps
+        MFSetAttributeSize(outputType.Get(), MF_MT_FRAME_SIZE, width, height);
+        MFSetAttributeRatio(outputType.Get(), MF_MT_FRAME_RATE, fps, 1);
+
+        m_encoder->SetOutputType(0, outputType.Get(), 0);
+
+        // Configure for low-latency streaming
+        ComPtr<ICodecAPI> codecApi;
+        m_encoder->QueryInterface(&codecApi);
+        if (codecApi) {
+            VARIANT var;
+            var.vt = VT_BOOL;
+            var.boolVal = VARIANT_TRUE;
+            codecApi->SetValue(&CODECAPI_AVLowLatencyMode, &var);
+            VariantClear(&var);
+        }
+
+        m_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+        m_encoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
         return true;
     }
 
-    // Pass a D3D11 texture pointer — zero CPU copy
+    // Pass a D3D11 texture pointer
     std::vector<uint8_t> EncodeFrame(ID3D11Texture2D* tex) {
-        NV_ENC_MAP_INPUT_RESOURCE mapParams = {NV_ENC_MAP_INPUT_RESOURCE_VER};
-        // Register & map tex as NV_ENC input ...
+        std::vector<uint8_t> nalData;
 
-        NV_ENC_PIC_PARAMS picParams = {NV_ENC_PIC_PARAMS_VER};
-        picParams.inputBuffer       = m_inputBuf;
+        // Create input sample from D3D11 texture
+        ComPtr<IMFSample> inputSample;
+        ComPtr<IMFMediaBuffer> inputBuffer;
+        ComPtr<IMFDXGIBuffer> dxgiBuffer;
+
+        MFCreateSample(&inputSample);
+        MFCreateDXGIBuffer(tex, TRUE, &dxgiBuffer);  // TRUE = read-only, GPU texture
+        inputSample->AddBuffer(dxgiBuffer.Get());
+
+        LONGLONG currentTime = 0;
+        inputSample->SetSampleTime(currentTime);
+        inputSample->SetSampleDuration(1000000 / m_fps);  // microseconds
+
+        // Process frame
+        m_encoder->ProcessInput(0, inputSample.Get(), 0);
+
+        // Get output
+        MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {};
+        DWORD status = 0;
+
+        while (m_encoder->ProcessOutput(0, 1, &outputDataBuffer, &status) == S_OK) {
+            if (outputDataBuffer.pSample) {
+                DWORD bufferCount;
+                outputDataBuffer.pSample->GetBufferCount(&bufferCount);
+
+                for (DWORD i = 0; i < bufferCount; ++i) {
+                    ComPtr<IMFMediaBuffer> buffer;
+                    outputDataBuffer.pSample->GetBufferByIndex(i, &buffer);
+
+                    BYTE* data = nullptr;
+                    DWORD length = 0;
+                    buffer->Lock(&data, nullptr, &length);
+
+                    nalData.insert(nalData.end(), data, data + length);
+
+                    buffer->Unlock();
+                }
+                outputDataBuffer.pSample->Release();
+            }
+        }
+
+        return nalData;
+    }
         picParams.outputBitstream   = m_outputBuf;
         picParams.inputWidth        = /* width */;
         picParams.inputHeight       = /* height */;

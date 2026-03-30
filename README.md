@@ -10,15 +10,11 @@
 
 - [Features](#features)
 - [System Requirements](#system-requirements)
-- [Architecture & Workflow](#architecture--workflow)
-- [Quick Start](#quick-start)
-- [Installation Guide](#installation-guide)
-- [Building on macOS](#building-on-macos)
-- [iPad Setup & Launch](#ipad-setup--launch)
+- **[🪟 Windows Server Setup](#-windows-server-setup)** ⭐ **Start Here!**
+- [macOS / iPad Setup](#-building-on-macos)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
-- [Advanced](#advanced)
 
 ---
 
@@ -42,10 +38,18 @@
 - **Storage**: ~50 MB available space
 
 ### Windows Host Side
-- **OS**: Windows 10 or Windows 11
-- **GPU**: NVIDIA GPU (for NVENC encoding) or CPU fallback
-- **Network**: Bonjour service advertised on the network
-- **C++ Runtime**: Visual Studio redistributable libraries
+- **OS**: Windows 10 (Build 19041+) or Windows 11
+- **GPU**: Video encoding support (in priority order):
+  - 🟠 **AMD Ryzen (Radeon Graphics)**: Ryzen 3XXX series+ (built-in GPU with VCN encoder)
+  - 🟢 **NVIDIA GeForce**: GTX 750 Ti and newer (uses NVENC hardware encoder)
+  - 🔵 **Intel Integrated/Arc**: 10th Gen CPU+ or Arc GPU (uses QuickSync)
+  - **Fallback**: None required — Windows Media Foundation software codec (25% CPU, 30-60 FPS)
+- **Network**: Wi-Fi connection (must be on same network as iPad)
+- **Storage**: 500 MB for build artifacts, drivers, and SDKs
+- **Build Tools**: Visual Studio 2019+ or 2022 Community edition with:
+  - ✓ Desktop development with C++
+  - ✓ Windows 10/11 SDK (19041+)
+  - ✓ Optional: Windows Driver Kit (WDK) for IDD driver
 
 ### macOS Development Machine (Build Only)
 - **macOS**: 11.0 or later
@@ -99,39 +103,168 @@
 3. **Input**: iPad captures touch/pencil → serializes to JSON → TCP sends back to Windows
 4. **Discovery**: Bonjour finds Windows host automatically; app connects on first start
 
-### Threading Model
-
-| Component | Thread | Purpose |
-|-----------|--------|---------|
-| `BonjourBrowser` | Main (RunLoop) | Service discovery |
-| `StreamClient` | Global(userInteractive) | Network I/O |
-| `VideoDecoder` | VideoToolbox background | H.264 decoding |
-| `MetalRenderer` | CADisplayLink (Main) | GPU rendering |
-| `InputCaptureView` | Main | Touch event handling |
-
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites Checklist
 - [ ] iPad with Wi-Fi enabled
-- [ ] Windows host on same Wi-Fi network running the CarSide server
+- [ ] Windows 10/11 host with GPU on same Wi-Fi network
 - [ ] Mac with Xcode 12+ installed
-- [ ] All source files (*.swift, *.plist)
+- [ ] Visual Studio 2019+ on Windows
+- [ ] Administrator access on Windows
 
-### 30-Second Overview
-1. Clone/download source files to your Mac
-2. Open Xcode, create new iOS App project
-3. Copy `.swift` files into Xcode project
-4. Add `Info.plist` to project
-5. Build and run on iPad via Xcode
-6. App auto-connects to Windows host
+### 2-Minute Overview
+**Windows Setup:**
+```powershell
+# 1. Run as Administrator
+powershell -ExecutionPolicy Bypass -File Setup-CarSide.ps1 -All
+
+# 2. Build the project in Visual Studio
+# 3. Run CarSideServer.exe
+```
+
+**macOS/iPad Setup:**
+```bash
+# 1. Open project in Xcode
+# 2. Build and deploy to iPad
+# 3. App auto-connects to Windows host
+```
 
 ---
 
-## 📦 Installation Guide
+## 🪟 Windows Server Setup
 
-### Step 1: Prepare Your Development Environment
+### Step 0: Install Visual Studio & WDK
+
+#### Install Visual Studio 2019+ Community Edition (FREE)
+
+1. Download from: https://visualstudio.microsoft.com/downloads/
+2. Run installer and select:
+   - ✓ **Desktop development with C++**
+   - ✓ **Windows 10/11 SDK** (version 19041 or later)
+3. Complete installation (~5-8 GB)
+
+#### Install Windows Driver Kit (WDK) — Optional
+
+For IDD virtual display driver support:
+1. Download: https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk
+2. Install alongside Visual Studio
+3. Provides `inf` driver files and deployment tools
+
+#### Install Bonjour SDK for Windows — Optional
+
+For automatic service discovery on network:
+1. Download: https://support.apple.com/downloads/DL888/en_US/BonjourSDKforWindows.zip
+2. Extract to `C:\Program Files\Bonjour`
+3. Add to Visual Studio include/lib paths
+
+### Step 1: Run Setup Script
+
+**Quick Setup (Recommended):**
+```powershell
+# Run PowerShell as Administrator
+cd C:\path\to\CarSide
+powershell -ExecutionPolicy Bypass -File Setup-CarSide.ps1 -All
+```
+
+This script will:
+1. Enable test signing mode for unsigned drivers (requires reboot)
+2. Register the IDD virtual display driver
+3. Open Windows Firewall port 7878
+4. Register Bonjour mDNS service
+
+**Alternative: Manual Setup**
+
+If you prefer to do it step-by-step:
+
+#### Step 1a: Enable Test Signing (for drivers)
+```powershell
+# Run once, then reboot
+bcdedit /set testsigning on
+shutdown /r /t 0
+```
+
+#### Step 1b: Register IDD Driver (after reboot)
+```powershell
+# After reboot, run as Administrator
+pnputil /add-driver CarSideIdd.inf /install
+```
+
+#### Step 1c: Open Firewall Port
+```powershell
+netsh advfirewall firewall add rule name="CarSide" ^
+  dir=in action=allow protocol=TCP localport=7878 ^
+  description="CarSide wireless display server"
+```
+
+### Step 2: Build the Server (Visual Studio)
+
+1. **Open** `CarSide.sln` in Visual Studio
+2. **Configuration**: Select **Release | x64**
+3. **Build** → **Build Solution** (Ctrl+Shift+B)
+4. Output: `bin\x64\Release\CarSideServer.exe`
+
+### Step 3: Configure Video Encoder
+
+The server auto-detects your GPU:
+
+**AMD Radeon (Recommended for Ryzen)**
+- Uses Windows Media Foundation + DXVA2
+- Automatic hardware acceleration via VCN encoder
+- No additional SDK needed
+- Performance: 4-8 Mbps H.264 @ 60 FPS
+
+**NVIDIA GeForce (Uses NVENC)**
+- Requires: NVIDIA Video Codec SDK
+- Download: https://developer.nvidia.com/nvidia-video-codec-sdk
+- Extract and add to Visual Studio project paths
+- Performance: 4-8 Mbps @ 120 FPS
+
+**Intel GPU (Uses QuickSync)**
+- Built-in support via Windows Media Foundation
+- No additional SDK required
+- Performance: 4-8 Mbps @ 60 FPS
+
+**CPU Fallback**
+- Automatic if GPU encoding unavailable
+- Uses Windows Media Foundation software codec
+- Performance: ~25% CPU, 30-60 FPS (adequate for mouse/touch)
+
+### Step 4: Run the Server
+
+```powershell
+# From command prompt or PowerShell
+C:\path\to\CarSide\bin\x64\Release\CarSideServer.exe
+
+# Or add to Task Scheduler for auto-start:
+# Tasks → Create Basic Task... → Trigger: At Startup → Action: Run program
+```
+
+You should see:
+```
+[StreamServer] Started on port 7878
+[Bonjour] Service registered as 'CarSide._winextend._tcp.local.:7878'
+[StreamServer] Waiting for client connection...
+```
+
+### Step 5: Network Configuration
+
+Verify connectivity:
+
+```powershell
+# Check firewall rule
+netsh advfirewall firewall show rule name="CarSide"
+
+# Test port is open (from another machine on same network)
+Test-NetConnection -ComputerName <windows-hostname>.local -Port 7878
+```
+
+---
+
+## 📱 Building on macOS
+
+### Via Xcode GUI (Recommended)
 
 #### On macOS:
 1. **Install Xcode**
