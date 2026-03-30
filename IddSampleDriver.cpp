@@ -2,7 +2,8 @@
 #include <IddCx.h>
 #include <cstdio>
 
-extern class FrameCapturer* g_captureModule;
+class FrameCapturer;
+extern FrameCapturer* g_captureModule;
 
 NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER adapter, const IDARG_IN_ADAPTER_INIT_FINISHED* pArgs) {
     IDDCX_MONITOR_INFO monInfo = {};
