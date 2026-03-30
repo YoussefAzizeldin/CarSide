@@ -66,7 +66,7 @@ static UINT32 PhaseToPointerFlags(int phase, bool isDown) {
         flags = POINTER_FLAG_UP;
         break;
     case 4: // cancelled
-        flags = POINTER_FLAG_UP | POINTER_FLAG_CANCELLED;
+        flags = POINTER_FLAG_UP;  // | POINTER_FLAG_CANCELLED; (not available in all SDKs)
         break;
     default:
         flags = POINTER_FLAG_UPDATE;
@@ -132,7 +132,7 @@ void InjectTouch(const InputEvent& evt, int screenW, int screenH) {
     };
     contact.pressure = static_cast<UINT32>(evt.pressure * 1024);
 
-    if (!InjectSyntheticPointerInput(s_touchDevice, &contact, 1)) {
+    if (!InjectSyntheticPointerInput(s_touchDevice, reinterpret_cast<const POINTER_TYPE_INFO*>(&contact), 1)) {
         fprintf(stderr, "[Injector] InjectSyntheticPointerInput(touch) failed: %lu\n",
                 GetLastError());
     }
@@ -172,7 +172,7 @@ void InjectPen(const InputEvent& evt, int screenW, int screenH) {
     if (evt.isDrawingPad)
         pen.penFlags |= PEN_FLAG_BARREL;   // signals "drawing intent" to apps like OneNote
 
-    if (!InjectSyntheticPointerInput(s_penDevice, &pen, 1)) {
+    if (!InjectSyntheticPointerInput(s_penDevice, reinterpret_cast<const POINTER_TYPE_INFO*>(&pen), 1)) {
         fprintf(stderr, "[Injector] InjectSyntheticPointerInput(pen) failed: %lu\n",
                 GetLastError());
     }

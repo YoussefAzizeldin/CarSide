@@ -1,7 +1,7 @@
 // StreamServer.cpp — async Winsock2 TCP server with Bonjour registration
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <dns_sd.h>
+// #include <dns_sd.h>  // Bonjour SDK - optional
 #include <cstdint>
 #include <vector>
 #include <functional>
@@ -18,19 +18,19 @@ class StreamServer {
     std::atomic<bool> m_running{false};
     std::thread m_acceptThread;
     std::thread m_recvThread;
-    DNSServiceRef m_bonjourRef = nullptr;
+    // DNSServiceRef m_bonjourRef = nullptr;  // Bonjour - optional
     std::function<void(const InputEvent&)> m_inputCallback;
 
-    static void DNSSD_API BonjourCallback(DNSServiceRef sdRef, DNSServiceFlags flags,
-                                          uint32_t interfaceIndex, DNSServiceErrorType error,
-                                          const char* serviceName, const char* regType,
-                                          const char* domain, void* context) {
-        if (error == kDNSServiceErr_NoError) {
-            printf("[Bonjour] Service '%s' registered successfully\n", serviceName);
-        } else {
-            printf("[Bonjour] Registration error: %d\n", error);
-        }
-    }
+    // static void DNSSD_API BonjourCallback(DNSServiceRef sdRef, DNSServiceFlags flags,
+    //                                       uint32_t interfaceIndex, DNSServiceErrorType error,
+    //                                       const char* serviceName, const char* regType,
+    //                                       const char* domain, void* context) {
+    //     if (error == kDNSServiceErr_NoError) {
+    //         printf("[Bonjour] Service '%s' registered successfully\n", serviceName);
+    //     } else {
+    //         printf("[Bonjour] Registration error: %d\n", error);
+    //     }
+    // }
 
     void AcceptLoop() {
         printf("[StreamServer] Waiting for client connection...\n");
@@ -90,37 +90,37 @@ public:
         m_running = true;
         m_acceptThread = std::thread([this]() { this->AcceptLoop(); });
 
-        if (!RegisterBonjourService(port)) {
-            printf("[StreamServer] Bonjour registration failed\n");
-        }
+        // if (!RegisterBonjourService(port)) {
+        //     printf("[StreamServer] Bonjour registration failed\n");
+        // }
 
         printf("[StreamServer] Started on port %d\n", port);
         return true;
     }
 
-    bool RegisterBonjourService(uint16_t port) {
-        DNSServiceErrorType err = DNSServiceRegister(
-            &m_bonjourRef,
-            0,
-            0,
-            "CarSide",
-            "_winextend._tcp",
-            "local.",
-            nullptr,
-            htons(port),
-            0,
-            nullptr,
-            BonjourCallback,
-            this);
+    // bool RegisterBonjourService(uint16_t port) {
+    //     DNSServiceErrorType err = DNSServiceRegister(
+    //         &m_bonjourRef,
+    //         0,
+    //         0,
+    //         "CarSide",
+    //         "_winextend._tcp",
+    //         "local.",
+    //         nullptr,
+    //         htons(port),
+    //         0,
+    //         nullptr,
+    //         BonjourCallback,
+    //         this);
 
-        if (err == kDNSServiceErr_NoError) {
-            printf("[Bonjour] Service registered as 'CarSide._winextend._tcp.local.:%d'\n", port);
-            return true;
-        }
+    //     if (err == kDNSServiceErr_NoError) {
+    //         printf("[Bonjour] Service registered as 'CarSide._winextend._tcp.local.:%d'\n", port);
+    //         return true;
+    //     }
 
-        printf("[Bonjour] Registration failed with error: %d\n", err);
-        return false;
-    }
+    //     printf("[Bonjour] Registration failed with error: %d\n", err);
+    //     return false;
+    // }
 
     bool SendFrame(const std::vector<uint8_t>& nalData) {
         if (m_clientSock == INVALID_SOCKET) return false;
@@ -212,10 +212,10 @@ public:
             m_listenSock = INVALID_SOCKET;
         }
 
-        if (m_bonjourRef) {
-            DNSServiceRefDeallocate(m_bonjourRef);
-            m_bonjourRef = nullptr;
-        }
+        // if (m_bonjourRef) {
+        //     DNSServiceRefDeallocate(m_bonjourRef);
+        //     m_bonjourRef = nullptr;
+        // }
 
         WSACleanup();
 

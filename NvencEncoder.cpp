@@ -3,12 +3,19 @@
 
 #include <mfapi.h>
 #include <mfidl.h>
-#include <dxva2api.h>
 #include <codecapi.h>
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <vector>
 #include <cstdint>
+
+// Media Foundation error codes (may not be defined in all headers)
+#ifndef MF_E_TRANSFORM_NEED_MORE_INPUT
+#define MF_E_TRANSFORM_NEED_MORE_INPUT _HRESULT_TYPEDEF_(0xC00D6D72L)
+#endif
+#ifndef MF_E_TRANSFORM_STREAM_CHANGE
+#define MF_E_TRANSFORM_STREAM_CHANGE _HRESULT_TYPEDEF_(0xC00D6D73L)
+#endif
 
 using Microsoft::WRL::ComPtr;
 
@@ -87,7 +94,7 @@ public:
         ComPtr<IMFDXGIBuffer> dxgiBuf;
         if (FAILED(MFCreateDXGIBuffer(tex, FALSE, &dxgiBuf))) return nalData;
 
-        if (FAILED(sample->AddBuffer(dxgiBuf.Get()))) return nalData;
+        if (FAILED(sample->AddBuffer(static_cast<IMFMediaBuffer*>(dxgiBuf.Get())))) return nalData;
 
         LONGLONG sampleTime = frameIndex * (10000000 / m_fps);
         sample->SetSampleTime(sampleTime);

@@ -198,12 +198,33 @@ netsh advfirewall firewall add rule name="CarSide" ^
   description="CarSide wireless display server"
 ```
 
-### Step 2: Build the Server (Visual Studio)
+### Step 2: Build the Server
 
-1. **Open** `CarSide.sln` in Visual Studio
-2. **Configuration**: Select **Release | x64**
-3. **Build** → **Build Solution** (Ctrl+Shift+B)
-4. Output: `bin\x64\Release\CarSideServer.exe`
+#### Option 1: Using the Build Script (Recommended)
+```batch
+# Double-click Build-CarSide.bat or run from command prompt
+Build-CarSide.bat
+```
+
+#### Option 2: Manual Build with CMake
+```batch
+# Install CMake if not already installed
+# Download from: https://cmake.org/download/
+
+# Create build directory
+mkdir build
+cd build
+
+# Configure
+cmake .. -G "Visual Studio 17 2022" -A x64
+
+# Build
+cmake --build . --config Release
+```
+
+**Output:** `bin\Release\CarSideServer.exe`
+
+**Note:** The current build produces a stub executable that demonstrates the build system works. Full functionality requires implementing the screen capture, encoding, and networking components.
 
 ### Step 3: Configure Video Encoder
 
@@ -233,20 +254,33 @@ The server auto-detects your GPU:
 
 ### Step 4: Run the Server
 
-```powershell
-# From command prompt or PowerShell
-C:\path\to\CarSide\bin\x64\Release\CarSideServer.exe
+```batch
+# From command prompt
+CarSideServer.exe
 
-# Or add to Task Scheduler for auto-start:
-# Tasks → Create Basic Task... → Trigger: At Startup → Action: Run program
+# Or from the build directory
+.\bin\Release\CarSideServer.exe
 ```
 
-You should see:
+**Current Output (Stub Version):**
 ```
-[StreamServer] Started on port 7878
-[Bonjour] Service registered as 'CarSide._winextend._tcp.local.:7878'
-[StreamServer] Waiting for client connection...
+╔════════════════════════════════════════╗
+║  CarSide Server v1.0                   ║
+║  Wireless Display Extension for iPad   ║
+╚════════════════════════════════════════╝
+
+[Main] CarSide server build successful!
+[Main] This is a stub implementation.
+[Main] To implement full functionality:
+       1. Implement FrameCapturer for screen capture
+       2. Implement NvencEncoder for H.264 encoding
+       3. Implement StreamServer for network streaming
+       4. Implement InputInjector for touch/pen input
+
+[Main] Press Enter to exit...
 ```
+
+**Note:** The stub version demonstrates that the build system works. The full server implementation requires completing the screen capture, video encoding, and network streaming components.
 
 ### Step 5: Network Configuration
 

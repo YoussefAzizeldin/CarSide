@@ -1,18 +1,8 @@
 // FrameCapturer.cpp
-#include <d3d11.h>
-#include <dxgi1_2.h>
-#include <wrl/client.h>
+#include "FrameCapturer.h"
 #include <vector>
 
-using Microsoft::WRL::ComPtr;
-
-class FrameCapturer {
-    ComPtr<IDXGIOutputDuplication> m_duplication;
-    ComPtr<ID3D11Device>           m_device;
-    ComPtr<ID3D11DeviceContext>    m_context;
-
-public:
-    HRESULT Init(UINT adapterIndex = 0, UINT outputIndex = 0) {
+HRESULT FrameCapturer::Init(UINT adapterIndex, UINT outputIndex) {
         ComPtr<IDXGIFactory1> factory;
         HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
         if (FAILED(hr)) {
@@ -51,7 +41,7 @@ public:
         return output1->DuplicateOutput(m_device.Get(), &m_duplication);
     }
 
-    ID3D11Texture2D* AcquireFrameGPU(int& width, int& height) {
+    ID3D11Texture2D* FrameCapturer::AcquireFrameGPU(int& width, int& height) {
         DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
         ComPtr<IDXGIResource> resource;
 
@@ -74,7 +64,7 @@ public:
         return tex.Detach();
     }
 
-    bool AcquireFrameCPU(std::vector<uint8_t>& outRGBA, int& width, int& height) {
+    bool FrameCapturer::AcquireFrameCPU(std::vector<uint8_t>& outRGBA, int& width, int& height) {
         DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
         ComPtr<IDXGIResource> resource;
 
@@ -130,7 +120,7 @@ public:
 
     // Expose swap chain assignment used by IDD monitor callback
     // BUG FIX #X: Provide SetSwapChain for IddSampleMonitorAssignSwapChain
-    HRESULT SetSwapChain(HANDLE hSwapChain, LUID adapterLuid) {
+    HRESULT FrameCapturer::SetSwapChain(HANDLE hSwapChain, LUID adapterLuid) {
         // Optional: store swap chain and adapter LUID for acquisition path
         // For sample implementation we simply keep reference for later use.
         if (!hSwapChain) {
@@ -151,8 +141,19 @@ public:
         }
     }
 
-private:
-    // BUG FIX #24: Note about session 0 limitation
-    // NOTE: DuplicateOutput requires session 1 (interactive desktop).
-    // In UMDF driver context (session 0), use the swap chain from IddSampleMonitorAssignSwapChain instead.
-};
+    // Getter for device (used by encoder)
+    ID3D11Device* FrameCapturer::GetDevice() { return m_device.Get(); }
+    ID3D11DeviceContext* FrameCapturer::GetContext() { return m_context.Get(); }
+
+    // Simple wrapper for CaptureFrame
+    ID3D11Texture2D* FrameCapturer::CaptureFrame() {
+        int width, height;
+        return AcquireFrameGPU(width, height);
+    }
+
+    // BUG FIX #25: Add destructor for proper cleanup
+    FrameCapturer::~FrameCapturer() {
+        if (m_duplication) {
+            m_duplication = nullptr;  // ComPtr will release
+        }
+    }

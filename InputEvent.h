@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <nlohmann/json.hpp>
+#include "nlohmann/json.hpp"
 
 // Matches the Swift InputEvent struct sent over the wire as JSON.
 // EventType mirrors the Swift enum string raw values.

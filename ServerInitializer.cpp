@@ -6,15 +6,17 @@
 #include <thread>
 #include <chrono>
 #include <iostream>
+#include <vector>
+#include <objbase.h>
 
-// Forward declarations
-class FrameCapturer;
-class AMDEncoder;
-class StreamServer;
+// Class headers
+#include "FrameCapturer.h"
+#include "NvencEncoder.h"
+#include "StreamServer.h"
 
 // Global components
 FrameCapturer*  g_capturer  = nullptr;
-AMDEncoder*     g_encoder   = nullptr;
+NvencEncoder*     g_encoder   = nullptr;
 StreamServer*   g_server    = nullptr;
 
 // Global D3D11 device (used by encoder and capturer)
@@ -137,29 +139,31 @@ int main(int argc, char* argv[]) {
     printf("[Init] Initializing components...\n");
 
     // TODO: Initialize Frame Capturer
-    // g_capturer = new FrameCapturer();
-    // if (!g_capturer->Init()) {
-    //     printf("[Error] Frame capturer initialization failed\n");
-    //     return 1;
-    // }
-
+    g_capturer = new FrameCapturer();
+    if (FAILED(g_capturer->Init())) {
+        printf("[Error] Frame capturer initialization failed\n");
+        return 1;
+    }
+    // Set global D3D11 device for encoder
+    g_d3dDevice = g_capturer->GetDevice();
+    g_d3dContext = g_capturer->GetContext();
     printf("[Init] Frame capturer initialized\n");
 
     // Initialize Video Encoder (AMD/NVIDIA/Intel/CPU)
-    // g_encoder = new AMDEncoder();
-    // if (!g_encoder->Init(1920, 1080, 60)) {
-    //     printf("[Error] Video encoder initialization failed\n");
-    //     return 1;
-    // }
+    g_encoder = new NvencEncoder();
+    if (!g_encoder->Init(1920, 1080, 60)) {
+        printf("[Error] Video encoder initialization failed\n");
+        return 1;
+    }
 
     printf("[Init] Video encoder initialized\n");
 
     // Initialize Network Server
-    // g_server = new StreamServer();
-    // if (!g_server->Start(port)) {
-    //     printf("[Error] Server initialization failed\n");
-    //     return 1;
-    // }
+    g_server = new StreamServer();
+    if (!g_server->Start(port)) {
+        printf("[Error] Server initialization failed\n");
+        return 1;
+    }
 
     printf("[Init] All components initialized successfully\n\n");
 
